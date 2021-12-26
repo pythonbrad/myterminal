@@ -30,7 +30,7 @@
                               |-----------|
                       ARG ID  | 0 | 1 |  2|
 */
-void parse(char *line, char *cmds[MAX_NB_CMD][MAX_NB_ARG], char *modes)
+void parse(char* line, char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
 {
     int cmd_id = 0;
     int arg_id = 0;
@@ -82,7 +82,7 @@ void parse(char *line, char *cmds[MAX_NB_CMD][MAX_NB_ARG], char *modes)
 }
 
 // This function will execute the command in a child process
-void execute(char *cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
+void execute(char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
 {
     pid_t pid;
     int pipefd[2];
@@ -98,9 +98,11 @@ void execute(char *cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
     int cmd_id;
 
     for(cmd_id=0; cmds[cmd_id][0] != NULL; cmd_id++) {
+        // debug
+        fprintf(stderr, "DEBUG: ");
         for(int i=0; cmds[cmd_id][i] != NULL; i++)
-            printf("%s ", cmds[cmd_id][i]);
-        printf(":%c %c:\n", modes[cmd_id], modes[cmd_id+1]);
+            fprintf(stderr, "%s ", cmds[cmd_id][i]);
+        fprintf(stderr, ":%c %c:\n", modes[cmd_id], modes[cmd_id+1]);
 
         // We verify if the current command is a normal command
         switch (modes[cmd_id])
@@ -216,15 +218,34 @@ void execute(char *cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
     close(pipefd[0]);
 }
 
-int main(void)
+void eval(char* line)
 {
-    char line[1024];
-    char *cmds[MAX_NB_CMD][MAX_NB_ARG];
+    char* cmds[MAX_NB_CMD][MAX_NB_ARG];
 
     // Represent the mode of operation of each command
     char modes[MAX_NB_CMD];
-    int i;
 
+    // We parse the input, to get arguments
+    parse(line, cmds, modes);
+
+    // We verify if cmds got
+    if (cmds[0][0] == NULL)
+    {
+        fprintf(stderr, "Error: Syntax error\n");
+    }
+    else if (strcmp(cmds[0][0], "exit") == 0)
+    {
+        exit(EXIT_SUCCESS);
+    }
+    else
+        // We execute the commands
+        execute(cmds, modes);
+}
+
+int main(void)
+{
+    char line[1024];
+    
     while (1)
     {
         printf("> ");
@@ -235,20 +256,7 @@ int main(void)
         // We get the line
         fgets(line, sizeof(line), stdin);
 
-        // We parse the input, to get arguments
-        parse(line, cmds, modes);
-
-        // We verify if cmds got
-        if (cmds[0][0] == NULL)
-        {
-            fprintf(stderr, "Error: Syntax error\n");
-        }
-        else if (strcmp(cmds[0][0], "exit") == 0)
-        {
-            exit(EXIT_SUCCESS);
-        }
-        else
-            // We execute the commands
-            execute(cmds, modes);
+        // We evaluate
+        eval(line);
     }
 }
