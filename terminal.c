@@ -12,34 +12,57 @@
 #include <string.h>
 #include <malloc.h>
 
-#define MAX_NB_ARG 8
-#define MAX_NB_CMD 8
-#define MAX_ARG_LENGTH 8
+#define MAX_NB_ARG 32
+#define MAX_NB_CMD 32
+#define MAX_ARG_LENGTH 1024
 
-// This function split a line in many parts delimited by a space
-/* ls -la | grep *.exe will become ls0-la0|0grep0*.exe0
-                                  |--|----||----|-----|
-                            index |0 |  1 ||  0 |  1  |
-                                  |-------||----------|
-                        args n°   |   0   ||     1    |
+/* This function split a line in many parts delimited by a space
+   "cat < a | grep .git/ref | sort | more > b" will become "cat < a | grep ter | sort | more > b"
+                                                   MODE ID |   |0| |1|        |2|    |3|    |4| |
+                                                           |------------------------------------|
+                                                   CMD ID  |    0   |     1    |   2  |    3    |
+                                                           |------------------------------------|
+                                                   ARG ID  | 0 |  1 |  0  | 1  |   0  |  0  | 1 |
+    "cat < a > b" will become "cat < a > b"
+                      MODE ID |   |0| |1| |
+                              |-----------|
+                      CMD ID  |     0     |
+                              |-----------|
+                      ARG ID  | 0 | 1 |  2|
 */
-void parse(char *line, char *cmds[MAX_NB_CMD][MAX_NB_ARG])
+void parse(char *line, char *cmds[MAX_NB_CMD][MAX_NB_ARG], char *modes)
 {
     int cmd_id = 0;
     int arg_id = 0;
 
+    // the first mode is always null
+    *modes++ = '\0';
+
     while (*line != '\0')
     {
         // We mark the end of an argument
-        while (*line == ' ' || *line == '\t' || *line == '\n' || *line == '|')
+        while (*line == ' ' || *line == '\t' || *line == '\n' || *line == '|' || *line == '<' || *line == '>')
         {
             // We search an other command
-            if (*line == '|')
+            switch (*line)
             {
-                cmds[cmd_id++][arg_id] = '\0';
-                arg_id=0;
+                case '|':
+                case '<':
+                case '>':
+                    // We end the argument
+                    cmds[cmd_id++][arg_id] = '\0';
+                    arg_id=0;
+                    // We config the mode
+                    *modes++ = *line;
+                    break;
+                default:
+                    break;
             }
-            // We mark and go to the next character
+
+            // We mark the end the mode
+            *modes = '\0';
+
+            // We mark the end of this point of the line and go to the next
             *line++ = '\0';
         }
 
@@ -48,10 +71,8 @@ void parse(char *line, char *cmds[MAX_NB_CMD][MAX_NB_ARG])
         cmds[cmd_id][arg_id++] = line;
 
         // We skip the other part of the argument
-        while (*line != ' ' && *line != '\0' && *line != '\t' && *line != '\n' && *line != '|')
-        {
+        while (*line != ' ' && *line != '\0' && *line != '\t' && *line != '\n' && *line != '|' && *line != '<' && *line != '>')
             line++;
-        }
     }
 
     // We mark the end of the argument list
@@ -61,15 +82,35 @@ void parse(char *line, char *cmds[MAX_NB_CMD][MAX_NB_ARG])
 }
 
 // This function will execute the command in a child process
-void execute(char *cmds[MAX_NB_CMD][MAX_NB_ARG])
+void execute(char *cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
 {
     pid_t pid;
     int pipefd[2];
-    int last_out = fileno(stdin);
+    // default input/output
+    int din = fileno(stdin);
+    int dout = fileno(stdout);
+    // current input/output
+    int in = din;
+    int out = dout;
+    // old output
+    int old_output = in;
+    // current command
     int cmd_id;
-    char buf;
 
     for(cmd_id=0; cmds[cmd_id][0] != NULL; cmd_id++) {
+        for(int i=0; cmds[cmd_id][i] != NULL; i++)
+            printf("%s ", cmds[cmd_id][i]);
+        printf(":%c %c:\n", modes[cmd_id], modes[cmd_id+1]);
+
+        // We verify if the current command is a normal command
+        switch (modes[cmd_id])
+        {
+            case '<':
+            case '>':
+                continue;
+            default:
+                break;
+        }
 
         if (pipe(pipefd) == -1)
         // We create a child process
@@ -90,11 +131,54 @@ void execute(char *cmds[MAX_NB_CMD][MAX_NB_ARG])
                 // We close the unused read end
                 close(pipefd[0]);
 
-                // We redirect the input to the pip
-                dup2(last_out, fileno(stdin));
+                // We config the input and output in function of the mode
+                switch (modes[cmd_id+1])
+                {
+                    // ls | more
+                    case '|':
+                        // We redirect the output to the pipe
+                        out = pipefd[1];
+                        break;
+                    // cat < foo.txt
+                    // cat < foo.txt > foo2.txt
+                    // cat < foo.txt | sort
+                    case '<':
+                        // We redirect the input to a file
+                        in = fileno(fopen(*cmds[cmd_id+1], "rb"));
 
-                // We redirect the output to the pip
-                dup2(pipefd[1], fileno(stdout));
+                        // We redirect the output
+                        // to a file
+                        if (modes[cmd_id+2] == '>')
+                        {
+                            out = fileno(fopen(*cmds[cmd_id+2], "wb"));
+                        }
+                        // to the pipe
+                        else if (modes[cmd_id+2] == '|')
+                        {
+                            out = pipefd[1];
+                        }
+                        // to the normal output
+                        else {
+                            out = out;
+                        };
+                        break;
+                    // ls > foo.txt
+                    case '>':
+                        // We redirect the output to a file
+                        out = fileno(fopen(*cmds[cmd_id+1], "wb"));
+                        break;
+                }
+
+                // ls | more
+                // We redirect the input to the old output
+                if (modes[cmd_id] == '|')
+                {
+                    in = old_output;
+                }
+
+                // We apply the redirection
+                dup2(in, 0);
+                dup2(out, 1);
 
                 if (execvp(*cmds[cmd_id], cmds[cmd_id]) == -1)
                 {
@@ -105,7 +189,13 @@ void execute(char *cmds[MAX_NB_CMD][MAX_NB_ARG])
                 // We close the write end
                 close(pipefd[1]);
 
-                // We stop the process
+                // We close the input
+                close(fileno(stdin));
+
+                // We close the output
+                close(fileno(stdout));
+
+                // We stop the child process
                 exit(EXIT_SUCCESS);
             }
             // The process parent wait the child
@@ -113,19 +203,14 @@ void execute(char *cmds[MAX_NB_CMD][MAX_NB_ARG])
             {
                 // We close the unused write end and read end
                 close(pipefd[1]);
+
                 // wait for the completion
                 wait(NULL);
 
                 // we keep the read end of the pipe for the next process
-                last_out = pipefd[0];
+                old_output = pipefd[0];
             }
         }
-    }
-
-    // Finally, we show the file output
-    while (read(pipefd[0], &buf, 1) == 1)
-    {
-        printf("%c", buf);
     }
 
     close(pipefd[0]);
@@ -135,6 +220,9 @@ int main(void)
 {
     char line[1024];
     char *cmds[MAX_NB_CMD][MAX_NB_ARG];
+
+    // Represent the mode of operation of each command
+    char modes[MAX_NB_CMD];
     int i;
 
     while (1)
@@ -148,7 +236,7 @@ int main(void)
         fgets(line, sizeof(line), stdin);
 
         // We parse the input, to get arguments
-        parse(line, cmds);
+        parse(line, cmds, modes);
 
         // We verify if cmds got
         if (cmds[0][0] == NULL)
@@ -156,9 +244,11 @@ int main(void)
             fprintf(stderr, "Error: Syntax error\n");
         }
         else if (strcmp(cmds[0][0], "exit") == 0)
+        {
             exit(EXIT_SUCCESS);
-        
-        // We execute
-        execute(cmds);
+        }
+        else
+            // We execute the commands
+            execute(cmds, modes);
     }
-} 
+}
