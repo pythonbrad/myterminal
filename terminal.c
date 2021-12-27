@@ -24,12 +24,22 @@
                                                    CMD ID  |    0   |     1    |   2  |    3    |
                                                            |------------------------------------|
                                                    ARG ID  | 0 |  1 |  0  | 1  |   0  |  0  | 1 |
+ 
     "cat < a > b" will become "cat < a > b"
                       MODE ID |   |0| |1| |
                               |-----------|
                       CMD ID  |     0     |
                               |-----------|
                       ARG ID  | 0 | 1 |  2|
+
+    "echo beginning... & dir > a || ls > a && echo finished" will become "echo beginning... & dir > a || ls > a && echo finished"
+                                                                MODE ID  |       0          |    |0|  ||   |0|  ||              |
+                                                                         |------------------|---------||--------||--------------|
+                                                                CMD ID   |       0          |    0    ||    0   ||      0       |
+                                                                         |------------------|---------||--------||--------------|
+                                                                ARG ID   | 0  |     1       | 0  | 1  || 0 | 1  ||  0  |   1    |
+                                                                         |------------------|-----------------------------------|
+                                                                PROC ID  |        1         |                0                  |
 */
 void parse(char* line, char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
 {
