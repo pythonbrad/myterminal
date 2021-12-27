@@ -14,7 +14,7 @@
 
 #define MAX_NB_ARG 32
 #define MAX_NB_CMD 32
-#define MAX_ARG_LENGTH 1024
+#define MAX_LINE_LENGTH 1024
 #define DEBUG 0
 
 /* This function split a line in many parts delimited by a space
@@ -378,7 +378,7 @@ void eval(char* line)
 
 int main(void)
 {
-    char line[1024];
+    char line[MAX_LINE_LENGTH];
     
     while (1)
     {
