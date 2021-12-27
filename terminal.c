@@ -265,21 +265,105 @@ void eval(char* line)
     // Represent the mode of operation of each command
     char modes[MAX_NB_CMD];
 
-    // We parse the input, to get arguments
-    parse(line, cmds, modes);
+    // represent a point in the line where a command begin
+    char *pline = line;
 
-    // We verify if cmds got
-    if (cmds[0][0] == NULL)
+    // represent the execution mode
+    // last and current
+    char exec_mode[2] = "";
+
+    pid_t pid;
+
+    int last_exec_status = 0;
+
+    while (*line++ != '\0')
     {
-        fprintf(stderr, "Error: Syntax error\n");
+        if (*line == '&')
+        {
+            // we set parallel execution
+            exec_mode[1] = 'p';
+
+            *line = '\0';
+            if (*(line+1) == '&')
+            {
+                // we set "and" execution
+                exec_mode[1] = 'a';
+
+                *(++line) = '\0';
+            }
+        }
+        else if (*line == '|' && *(line+1) == '|')
+        {
+            // we set "or" execution
+            exec_mode[1] = 'o';
+
+            *line = '\0';
+            *(++line) = '\0';
+        }
+        else if (*(line+1) == '\0')
+        {
+            // we set normal execution
+            exec_mode[1] = '\0';
+        }
+        else
+        {
+            // We keep the next instructions
+            continue;
+        }
+
+        // We parse the input, to get arguments
+        parse(pline, cmds, modes);
+
+        // We verify if cmds got
+        if (cmds[0][0] == NULL)
+        {
+            ;//
+        }
+        else if (strcmp(cmds[0][0], "exit") == 0)
+        {
+            _exit(EXIT_SUCCESS);
+        }
+        else
+        {
+            // We execute the commands in function of the execution mode
+            // ls & dir
+
+            if (exec_mode[1] == 'p')
+            {
+                if (DEBUG)
+                    fprintf(stderr, "DEBUG: exec_mode in child %c\n", exec_mode[1]);
+                
+                if ((pid=fork()) == -1)
+                {
+                    fprintf(stderr, "Error: Cannot create a child process\n");
+                    _exit(EXIT_FAILURE);
+                }
+                else
+                {
+                    if (pid == 0)
+                    {
+                        // we terminate the child process
+                        _exit((execute(cmds, modes) == -1) ? EXIT_FAILURE : EXIT_SUCCESS);
+                    }
+                }
+            }
+            // ls || dir
+            // ls && dir
+            // ls
+            else
+            {
+                if (DEBUG)
+                    fprintf(stderr, "DEBUG: exec_mode %c\n", exec_mode[0]);
+                
+                if (exec_mode[0] == 'o' & last_exec_status == -1 || exec_mode[0] == 'a' & last_exec_status != -1 || exec_mode[0] == '\0' || exec_mode[0] == 'p')
+                    last_exec_status = execute(cmds, modes);
+            }
+        }
+        
+        // we save the last execution mode
+        exec_mode[0] = exec_mode[1];
+        pline = ++line;
     }
-    else if (strcmp(cmds[0][0], "exit") == 0)
-    {
-        exit(EXIT_SUCCESS);
-    }
-    else
-        // We execute the commands
-        execute(cmds, modes);
 }
 
 int main(void)
