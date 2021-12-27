@@ -15,6 +15,7 @@
 #define MAX_NB_ARG 32
 #define MAX_NB_CMD 32
 #define MAX_ARG_LENGTH 1024
+#define DEBUG 0
 
 /* This function split a line in many parts delimited by a space
    "cat < a | grep .git/ref | sort | more > b" will become "cat < a | grep ter | sort | more > b"
@@ -51,7 +52,7 @@ void parse(char* line, char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
                 case '>':
                     // We end the argument
                     cmds[cmd_id++][arg_id] = '\0';
-                    arg_id=0;
+                    arg_id = 0;
                     // We config the mode
                     *modes++ = *line;
                     break;
@@ -76,33 +77,52 @@ void parse(char* line, char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
     }
 
     // We mark the end of the argument list
-    cmds[cmd_id][arg_id-1] = '\0';
+    // We verify if the line end by a empty character
+    if (*(line-1) == 0)
+        cmds[cmd_id][arg_id-1] = '\0';
+
     // We mark the end of the command list
     cmds[cmd_id+1][0] = '\0';
 }
 
-// This function will execute the command in a child process
-void execute(char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
+/*
+    This function will execute the command in a child process
+    return -1 in case of error
+*/
+int execute(char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
 {
     pid_t pid;
     int pipefd[2];
+
+    // an error will be detected in reading this pipe
+    int errorfd[2];
+    
     // default input/output
     int din = fileno(stdin);
     int dout = fileno(stdout);
+    
     // current input/output
     int in = din;
     int out = dout;
+    
     // old output
     int old_output = in;
+    
     // current command
     int cmd_id;
+    char buf=0;
 
     for(cmd_id=0; cmds[cmd_id][0] != NULL; cmd_id++) {
         // debug
-        fprintf(stderr, "DEBUG: ");
-        for(int i=0; cmds[cmd_id][i] != NULL; i++)
-            fprintf(stderr, "%s ", cmds[cmd_id][i]);
-        fprintf(stderr, ":%c %c:\n", modes[cmd_id], modes[cmd_id+1]);
+        if (DEBUG)
+        {
+            fprintf(stderr, "DEBUG: ");
+
+            for(int i=0; cmds[cmd_id][i] != NULL; i++)
+                fprintf(stderr, "%s ", cmds[cmd_id][i]);
+            
+            fprintf(stderr, ":%c %c:\n", modes[cmd_id], modes[cmd_id+1]);
+        }
 
         // We verify if the current command is a normal command
         switch (modes[cmd_id])
@@ -114,16 +134,16 @@ void execute(char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
                 break;
         }
 
-        if (pipe(pipefd) == -1)
+        if (pipe(pipefd) == -1 || pipe(errorfd) == -1)
         // We create a child process
         {
             fprintf(stderr, "Error: Cannot create a pipe\n");
-            exit(EXIT_FAILURE);
+            _exit(EXIT_FAILURE);
         }
         else if ((pid = fork()) == -1)
         {
             fprintf(stderr, "Error: Cannot create a child process\n");
-            exit(EXIT_FAILURE);
+            _exit(EXIT_FAILURE);
         }
         else
         {
@@ -132,6 +152,10 @@ void execute(char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
             {
                 // We close the unused read end
                 close(pipefd[0]);
+                close(errorfd[0]);
+
+                // We redirect the stderr to the error pipe
+                dup2(errorfd[1], fileno(stderr));
 
                 // We config the input and output in function of the mode
                 switch (modes[cmd_id+1])
@@ -185,11 +209,12 @@ void execute(char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
                 if (execvp(*cmds[cmd_id], cmds[cmd_id]) == -1)
                 {
                     fprintf(stderr, "Error: Failed to execute the command\n");
-                    exit(EXIT_FAILURE);
+                    _exit(EXIT_FAILURE);
                 }
 
                 // We close the write end
                 close(pipefd[1]);
+                close(errorfd[1]);
 
                 // We close the input
                 close(fileno(stdin));
@@ -198,16 +223,26 @@ void execute(char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
                 close(fileno(stdout));
 
                 // We stop the child process
-                exit(EXIT_SUCCESS);
+                _exit(EXIT_SUCCESS);
             }
             // The process parent wait the child
             else
             {
                 // We close the unused write end and read end
                 close(pipefd[1]);
+                close(errorfd[1]);
 
                 // wait for the completion
                 wait(NULL);
+
+                // We verify if we have an error
+                while (read(errorfd[0], &buf, 1) == 1)
+                    printf("%c", buf);
+
+                // If an error is got
+                // We stop the executing
+                if (buf)
+                    break;
 
                 // we keep the read end of the pipe for the next process
                 old_output = pipefd[0];
@@ -215,7 +250,12 @@ void execute(char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
         }
     }
 
+    // We close unused read end
     close(pipefd[0]);
+    close(errorfd[0]);
+
+    // We return an error status
+    return (buf == 0) ? 0 : -1;
 }
 
 void eval(char* line)
