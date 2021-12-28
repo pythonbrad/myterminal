@@ -32,14 +32,6 @@
                               |-----------|
                       ARG ID  | 0 | 1 |  2|
 
-    "echo beginning... & dir > a || ls > a && echo finished" will become "echo beginning... & dir > a || ls > a && echo finished"
-                                                                MODE ID  |       0          |    |0|  ||   |0|  ||              |
-                                                                         |------------------|---------||--------||--------------|
-                                                                CMD ID   |       0          |    0    ||    0   ||      0       |
-                                                                         |------------------|---------||--------||--------------|
-                                                                ARG ID   | 0  |     1       | 0  | 1  || 0 | 1  ||  0  |   1    |
-                                                                         |------------------|-----------------------------------|
-                                                                PROC ID  |        1         |                0                  |
 */
 void parse(char* line, char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
 {
@@ -268,6 +260,18 @@ int execute(char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
     return (buf == 0) ? 0 : -1;
 }
 
+/*
+    This function permit to evaluate a string of command
+    
+    "echo beginning... & dir > a || ls > a && echo finished" will become "echo beginning... & dir > a || ls > a && echo finished"
+                                                                MODE ID  |       0          |    |0|  ||   |0|  ||              |
+                                                                         |------------------|---------||--------||--------------|
+                                                                CMD ID   |       0          |    0    ||    0   ||      0       |
+                                                                         |------------------|---------||--------||--------------|
+                                                                ARG ID   | 0  |     1       | 0  | 1  || 0 | 1  ||  0  |   1    |
+                                                                         |------------------|-----------------------------------|
+                                                                PROC ID  |        1         |                0                  |
+*/
 void eval(char* line)
 {
     char* cmds[MAX_NB_CMD][MAX_NB_ARG];
