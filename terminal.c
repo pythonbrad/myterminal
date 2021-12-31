@@ -205,8 +205,8 @@ int execute(char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
                 }
 
                 // We apply the redirection
-                dup2(in, 0);
-                dup2(out, 1);
+                dup2(in, din);
+                dup2(out, dout);
 
                 if (execvp(*cmds[cmd_id], cmds[cmd_id]) == -1)
                 {
@@ -219,10 +219,10 @@ int execute(char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
                 close(errorfd[1]);
 
                 // We close the input
-                close(fileno(stdin));
+                close(din);
 
                 // We close the output
-                close(fileno(stdout));
+                close(dout);
 
                 // We stop the child process
                 _exit(EXIT_SUCCESS);
