@@ -383,7 +383,10 @@ void eval(char* line)
 int main(void)
 {
     char line[MAX_LINE_LENGTH];
+    char prev_line[MAX_LINE_LENGTH];
     
+    printf("Simple shell by pythonbrad\nUse : to reuse the previous command line\n");
+
     while (1)
     {
         printf("> ");
@@ -391,8 +394,15 @@ int main(void)
         // We flush the output screen
         fflush(stdout);
 
+        // We save the last
+        strcpy(prev_line, line);
+
         // We get the line
         fgets(line, sizeof(line), stdin);
+
+        // We reuse the previous command if asked
+        if (strcmp(line, ":\n") == 0)
+            strcpy(line, prev_line);
 
         // We evaluate
         eval(line);
