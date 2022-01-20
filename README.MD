@@ -1,1 +1,1 @@
-Little terminal writen in C
+# Little terminal writen in C
