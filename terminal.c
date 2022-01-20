@@ -210,7 +210,7 @@ int execute(char* cmds[MAX_NB_CMD][MAX_NB_ARG], char* modes)
 
                 if (execvp(*cmds[cmd_id], cmds[cmd_id]) == -1)
                 {
-                    fprintf(stderr, "Error: Failed to execute the command\n");
+                    fprintf(stderr, "Error: Failed to execute the command \"%s\"\n", *cmds[cmd_id]);
                     _exit(EXIT_FAILURE);
                 }
 
@@ -369,7 +369,7 @@ void eval(char* line)
                 if (DEBUG)
                     fprintf(stderr, "DEBUG: exec_mode %c\n", exec_mode[0]);
                 
-                if (exec_mode[0] == 'o' & last_exec_status == -1 || exec_mode[0] == 'a' & last_exec_status != -1 || exec_mode[0] == '\0' || exec_mode[0] == 'p')
+                if ((exec_mode[0] == 'o' && last_exec_status == -1) || (exec_mode[0] == 'a' && last_exec_status != -1) || exec_mode[0] == '\0' || exec_mode[0] == 'p')
                     last_exec_status = execute(cmds, modes);
             }
         }
